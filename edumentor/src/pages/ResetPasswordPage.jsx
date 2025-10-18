@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { BookOpen, AlertCircle, CheckCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
-const ResetPasswordPage = ({ onNavigate }) => {
+const ResetPasswordPage = () => {
+  const navigate = useNavigate();
   const { updatePassword } = useAuth();
   const [formData, setFormData] = useState({
     newPassword: '',
@@ -42,7 +44,7 @@ const ResetPasswordPage = ({ onNavigate }) => {
     if (result.success) {
       setSuccess(result.message);
       setTimeout(() => {
-        onNavigate('login');
+        navigate('/login');
       }, 2000);
     } else {
       setError(result.message);

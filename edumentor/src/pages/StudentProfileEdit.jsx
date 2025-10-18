@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import {
@@ -26,7 +27,8 @@ import {
   Save
 } from 'lucide-react';
 
-const StudentProfileEdit = ({ onNavigate }) => {
+const StudentProfileEdit = () => {
+  const navigate = useNavigate();
   const { user, profile } = useAuth();
   const [studentProfile, setStudentProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -464,7 +466,7 @@ const StudentProfileEdit = ({ onNavigate }) => {
           {/* Actions */}
           <div className="flex justify-between items-center bg-white rounded-xl shadow-sm p-6">
             <button
-              onClick={() => onNavigate && onNavigate('student-dashboard')}
+              onClick={() => navigate('/student/dashboard')}
               className="px-6 py-2 border border-[#E6EEF8] text-[#101827] rounded-lg hover:bg-[#F7F9FB] transition"
             >
               Back to Dashboard

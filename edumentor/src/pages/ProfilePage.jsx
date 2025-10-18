@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import {
@@ -21,7 +22,8 @@ import {
   Award
 } from 'lucide-react';
 
-const ProfilePage = ({ onNavigate }) => {
+const ProfilePage = () => {
+  const navigate = useNavigate();
   const { user, profile } = useAuth();
   const [profileData, setProfileData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -34,6 +36,8 @@ const ProfilePage = ({ onNavigate }) => {
   useEffect(() => {
     if (user) {
       fetchProfileData();
+    } else {
+      setLoading(false);
     }
   }, [user]);
 
@@ -256,7 +260,7 @@ const ProfilePage = ({ onNavigate }) => {
               </div>
             </div>
             <button
-              onClick={() => onNavigate(isStudent ? 'student-dashboard' : 'mentor-dashboard')}
+              onClick={() => navigate(isStudent ? '/student/dashboard' : '/mentor/dashboard')}
               className="px-4 py-2 border border-[#E6EEF8] text-[#101827] rounded-lg hover:bg-[#F7F9FB] transition w-full sm:w-auto"
             >
               Back to Dashboard

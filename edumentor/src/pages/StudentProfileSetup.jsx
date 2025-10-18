@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { BookOpen, ArrowRight, ArrowLeft, CheckCircle, Upload } from 'lucide-react';
 
-const StudentProfileSetup = ({ onNavigate }) => {
+const StudentProfileSetup = () => {
+  const navigate = useNavigate();
   const { user, profile } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -141,9 +143,7 @@ const StudentProfileSetup = ({ onNavigate }) => {
       if (studentError) throw studentError;
 
       // Navigate to dashboard
-      if (onNavigate) {
-        onNavigate('student-dashboard');
-      }
+      navigate('/student/dashboard');
     } catch (error) {
       console.error('Error saving profile:', error);
       setError(error.message || 'Failed to save profile. Please try again.');
@@ -535,7 +535,7 @@ const StudentProfileSetup = ({ onNavigate }) => {
         {/* Skip for now */}
         <div className="text-center mt-6">
           <button
-            onClick={() => onNavigate && onNavigate('student-dashboard')}
+            onClick={() => navigate('/student/dashboard')}
             className="text-[#A6B4C8] hover:text-[#1F6FEB] transition text-sm"
           >
             Skip for now, I'll complete this later

@@ -1,7 +1,9 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Users, TrendingUp, Star, CheckCircle, ArrowRight } from 'lucide-react';
 
-const HomePage = ({ onNavigate }) => {
+const HomePage = () => {
+  const navigate = useNavigate();
   return (
     <div className="min-h-screen bg-white">
       {/* Hero Section */}
@@ -18,14 +20,14 @@ const HomePage = ({ onNavigate }) => {
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
                 <button 
-                  onClick={() => onNavigate('signup-student')}
+                  onClick={() => navigate('/signup/student')}
                   className="px-8 py-4 bg-[#FF6B6B] text-white rounded-lg hover:bg-[#ff5252] transition flex items-center justify-center group"
                 >
                   I'm a Student
                   <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition" />
                 </button>
                 <button 
-                  onClick={() => onNavigate('signup-mentor')}
+                  onClick={() => navigate('/signup/mentor')}
                   className="px-8 py-4 bg-[#1F6FEB] text-white rounded-lg hover:bg-[#1557c0] transition flex items-center justify-center group"
                 >
                   I'm a Mentor
@@ -137,7 +139,7 @@ const HomePage = ({ onNavigate }) => {
             Join thousands of students and mentors transforming careers every day.
           </p>
           <button 
-            onClick={() => onNavigate('signup-student')}
+            onClick={() => navigate('/signup/student')}
             className="px-8 py-4 bg-[#FF6B6B] text-white rounded-lg hover:bg-[#ff5252] transition text-lg font-semibold"
           >
             Get Started Free

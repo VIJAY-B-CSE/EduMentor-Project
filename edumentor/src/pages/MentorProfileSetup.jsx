@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { Award, ArrowRight, ArrowLeft, CheckCircle, Upload, AlertCircle } from 'lucide-react';
 
-const MentorProfileSetup = ({ onNavigate }) => {
+const MentorProfileSetup = () => {
+  const navigate = useNavigate();
   const { user, profile } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -147,9 +149,7 @@ const MentorProfileSetup = ({ onNavigate }) => {
       if (mentorError) throw mentorError;
 
       // Navigate to dashboard
-      if (onNavigate) {
-        onNavigate('mentor-dashboard');
-      }
+      navigate('/mentor/dashboard');
     } catch (error) {
       console.error('Error saving profile:', error);
       setError(error.message || 'Failed to save profile. Please try again.');
@@ -554,7 +554,7 @@ const MentorProfileSetup = ({ onNavigate }) => {
         {/* Skip for now */}
         <div className="text-center mt-6">
           <button
-            onClick={() => onNavigate && onNavigate('mentor-dashboard')}
+            onClick={() => navigate('/mentor/dashboard')}
             className="text-[#A6B4C8] hover:text-[#00C38A] transition text-sm"
           >
             Skip for now, I'll complete this later

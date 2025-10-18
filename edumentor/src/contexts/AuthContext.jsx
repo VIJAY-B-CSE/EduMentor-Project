@@ -19,56 +19,153 @@ export const AuthProvider = ({ children }) => {
 
   // Check active session on mount
   useEffect(() => {
-    checkUser();
+    let isInitialized = false;
+    let timeoutId = null;
+
+    const initializeAuth = async () => {
+      try {
+        setLoading(true);
+        await checkUser();
+      } catch (error) {
+        console.error('Auth initialization error:', error);
+        setUser(null);
+        setProfile(null);
+        setIsAuthenticated(false);
+      } finally {
+        if (!isInitialized) {
+          setLoading(false);
+          isInitialized = true;
+        }
+      }
+    };
+
+    // Add timeout to prevent infinite loading only for initial load
+    timeoutId = setTimeout(() => {
+      if (!isInitialized) {
+        console.warn('Auth initialization timeout - setting loading to false');
+        setLoading(false);
+        isInitialized = true;
+      }
+    }, 8000); // Increased to 8 seconds
+
+    initializeAuth();
 
     // Listen for auth changes
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('Auth event:', event);
-        if (session?.user) {
-          await fetchUserProfile(session.user);
-        } else {
+        try {
+          if (session?.user) {
+            // Clear any existing timeout when user signs in
+            if (timeoutId) {
+              clearTimeout(timeoutId);
+              timeoutId = null;
+            }
+            await fetchUserProfile(session.user);
+          } else {
+            setUser(null);
+            setProfile(null);
+            setIsAuthenticated(false);
+          }
+        } catch (error) {
+          console.error('Auth state change error:', error);
           setUser(null);
           setProfile(null);
           setIsAuthenticated(false);
+        } finally {
+          setLoading(false);
+          isInitialized = true;
         }
-        setLoading(false);
       }
     );
 
     return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
       authListener?.subscription?.unsubscribe();
     };
   }, []);
 
   const checkUser = async () => {
     try {
+      console.log('AuthContext: Checking user session...');
       const { data: { session } } = await supabase.auth.getSession();
+      console.log('AuthContext: Session data:', session);
       if (session?.user) {
+        console.log('AuthContext: User found, fetching profile...');
         await fetchUserProfile(session.user);
+      } else {
+        console.log('AuthContext: No user session found');
+        setUser(null);
+        setProfile(null);
+        setIsAuthenticated(false);
       }
     } catch (error) {
       console.error('Error checking user:', error.message);
-    } finally {
-      setLoading(false);
+      setUser(null);
+      setProfile(null);
+      setIsAuthenticated(false);
     }
   };
 
   const fetchUserProfile = async (authUser) => {
     try {
-      const { data: profileData, error } = await supabase
+      console.log('Fetching profile for user:', authUser.id);
+      
+      // Add timeout to profile fetching
+      const profilePromise = supabase
         .from('profiles')
         .select('*')
         .eq('id', authUser.id)
         .single();
+      
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Profile fetch timeout')), 5000)
+      );
 
-      if (error) throw error;
+      const { data: profileData, error } = await Promise.race([profilePromise, timeoutPromise]);
 
+      if (error) {
+        console.log('Profile fetch error (likely no profile exists):', error.message);
+        // If profile doesn't exist, create a basic profile structure
+        // This ensures the user can still navigate and complete setup
+        const basicProfile = {
+          id: authUser.id,
+          email: authUser.email,
+          role: 'student', // Default role
+          full_name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'User',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+        
+        console.log('Creating basic profile for user:', basicProfile);
+        setUser(authUser);
+        setProfile(basicProfile);
+        setIsAuthenticated(true);
+        return;
+      }
+
+      console.log('Profile fetched successfully:', profileData);
       setUser(authUser);
       setProfile(profileData);
       setIsAuthenticated(true);
     } catch (error) {
       console.error('Error fetching profile:', error.message);
+      // Even if profile fetch fails, create a basic profile structure
+      const basicProfile = {
+        id: authUser.id,
+        email: authUser.email,
+        role: 'student', // Default role
+        full_name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'User',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      
+      console.log('Creating fallback profile for user:', basicProfile);
+      setUser(authUser);
+      setProfile(basicProfile);
+      setIsAuthenticated(true);
     }
   };
 
@@ -148,21 +245,35 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
+      console.log('Login attempt for:', email);
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Login error:', error);
+        return {
+          success: false,
+          message: error.message || 'Login failed. Please check your credentials.',
+        };
+      }
 
       if (data.user) {
-        await fetchUserProfile(data.user);
+        console.log('Login successful, user authenticated');
+        // Don't wait for profile fetching here - let the auth state change handler handle it
+        // This prevents the login from timing out while profile is being fetched
         return {
           success: true,
           message: 'Login successful!',
           user: data.user,
         };
       }
+
+      return {
+        success: false,
+        message: 'Login failed. No user data received.',
+      };
     } catch (error) {
       console.error('Login error:', error);
       return {

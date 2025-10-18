@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { 
@@ -13,29 +14,44 @@ import {
   AlertCircle
 } from 'lucide-react';
 
-const MentorDashboard = ({ onNavigate }) => {
+const MentorDashboard = () => {
+  const navigate = useNavigate();
   const { profile, user } = useAuth();
   const [mentorProfile, setMentorProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchMentorProfile();
+    if (user) {
+      fetchMentorProfile();
+    } else {
+      setLoading(false);
+    }
   }, [user]);
 
   const fetchMentorProfile = async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
 
     try {
+      setLoading(true);
       const { data, error } = await supabase
         .from('mentor_profiles')
         .select('*')
         .eq('user_id', user.id)
         .single();
 
-      if (error) throw error;
-      setMentorProfile(data);
+      if (error) {
+        console.error('Error fetching mentor profile:', error);
+        // If profile doesn't exist, that's okay - user might need to complete setup
+        setMentorProfile(null);
+      } else {
+        setMentorProfile(data);
+      }
     } catch (error) {
       console.error('Error fetching mentor profile:', error);
+      setMentorProfile(null);
     } finally {
       setLoading(false);
     }
@@ -46,7 +62,8 @@ const MentorDashboard = ({ onNavigate }) => {
       <div className="min-h-screen bg-[#F7F9FB] flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#00C38A] mx-auto mb-4"></div>
-          <p className="text-[#A6B4C8]">Loading your dashboard...</p>
+          <p className="text-[#A6B4C8]">Loading dashboard...</p>
+          <p className="text-xs text-[#A6B4C8] mt-2">If this takes too long, try refreshing the page</p>
         </div>
       </div>
     );

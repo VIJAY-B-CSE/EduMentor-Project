@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { BookOpen, AlertCircle, CheckCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
-const SignupPage = ({ onNavigate, initialRole = 'student' }) => {
+const SignupPage = ({ initialRole = 'student' }) => {
+  const navigate = useNavigate();
   const { signup } = useAuth();
   const [formData, setFormData] = useState({
     name: '',
@@ -15,6 +17,12 @@ const SignupPage = ({ onNavigate, initialRole = 'student' }) => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Update URL when role changes
+  const handleRoleChange = (newRole) => {
+    setFormData(prev => ({ ...prev, role: newRole }));
+    navigate(`/signup/${newRole}`, { replace: true });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -70,7 +78,7 @@ const SignupPage = ({ onNavigate, initialRole = 'student' }) => {
       
       // Redirect to login after 3 seconds
       setTimeout(() => {
-        onNavigate('login');
+        navigate('/login');
       }, 3000);
     } else {
       setError(result.message);
@@ -111,7 +119,7 @@ const SignupPage = ({ onNavigate, initialRole = 'student' }) => {
               <div className="flex gap-4">
                 <button
                   type="button"
-                  onClick={() => setFormData({ ...formData, role: 'student' })}
+                  onClick={() => handleRoleChange('student')}
                   className={`flex-1 py-2 px-4 rounded-lg border-2 transition ${
                     formData.role === 'student'
                       ? 'border-[#1F6FEB] bg-[#1F6FEB] bg-opacity-10 text-[#1F6FEB]'
@@ -123,7 +131,7 @@ const SignupPage = ({ onNavigate, initialRole = 'student' }) => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setFormData({ ...formData, role: 'mentor' })}
+                  onClick={() => handleRoleChange('mentor')}
                   className={`flex-1 py-2 px-4 rounded-lg border-2 transition ${
                     formData.role === 'mentor'
                       ? 'border-[#00C38A] bg-[#00C38A] bg-opacity-10 text-[#00C38A]'
@@ -260,7 +268,7 @@ const SignupPage = ({ onNavigate, initialRole = 'student' }) => {
           <p className="mt-6 text-center text-sm text-[#A6B4C8]">
             Already have an account?{' '}
             <button
-              onClick={() => onNavigate('login')}
+              onClick={() => navigate('/login')}
               className="text-[#1F6FEB] hover:underline font-medium"
             >
               Login

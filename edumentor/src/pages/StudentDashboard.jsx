@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { 
@@ -13,30 +14,52 @@ import {
   ArrowRight
 } from 'lucide-react';
 
-const StudentDashboard = ({ onNavigate }) => {
+const StudentDashboard = () => {
+  const navigate = useNavigate();
   const { profile, user } = useAuth();
   const [studentProfile, setStudentProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchStudentProfile();
+    console.log('StudentDashboard: user changed', user);
+    if (user) {
+      fetchStudentProfile();
+    } else {
+      console.log('StudentDashboard: no user, stopping loading');
+      setLoading(false);
+    }
   }, [user]);
 
   const fetchStudentProfile = async () => {
-    if (!user) return;
+    if (!user) {
+      console.log('StudentDashboard: No user, stopping loading');
+      setLoading(false);
+      return;
+    }
 
     try {
+      setLoading(true);
+      console.log('StudentDashboard: Fetching student profile for user:', user.id);
+      
       const { data, error } = await supabase
         .from('student_profiles')
         .select('*')
         .eq('user_id', user.id)
         .single();
 
-      if (error) throw error;
-      setStudentProfile(data);
+      if (error) {
+        console.log('StudentDashboard: No student profile found, this is normal for new users');
+        // If profile doesn't exist, that's okay - user might need to complete setup
+        setStudentProfile(null);
+      } else {
+        console.log('StudentDashboard: Student profile fetched successfully:', data);
+        setStudentProfile(data);
+      }
     } catch (error) {
-      console.error('Error fetching student profile:', error);
+      console.error('StudentDashboard: Error fetching student profile:', error);
+      setStudentProfile(null);
     } finally {
+      console.log('StudentDashboard: Setting loading to false');
       setLoading(false);
     }
   };
@@ -46,7 +69,31 @@ const StudentDashboard = ({ onNavigate }) => {
       <div className="min-h-screen bg-[#F7F9FB] flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1F6FEB] mx-auto mb-4"></div>
-          <p className="text-[#A6B4C8]">Loading your dashboard...</p>
+          <p className="text-[#A6B4C8]">Loading dashboard...</p>
+          <p className="text-xs text-[#A6B4C8] mt-2">If this takes too long, try refreshing the page</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show setup prompt if no student profile exists
+  if (!studentProfile && !loading) {
+    return (
+      <div className="min-h-screen bg-[#F7F9FB] flex items-center justify-center">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center">
+          <div className="mb-6">
+            <div className="bg-[#1F6FEB] bg-opacity-10 rounded-full p-4 w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+              <BookOpen className="h-8 w-8 text-[#1F6FEB]" />
+            </div>
+            <h2 className="text-2xl font-bold text-[#101827] mb-2">Complete Your Profile</h2>
+            <p className="text-[#A6B4C8]">Set up your student profile to get started with personalized learning.</p>
+          </div>
+          <button
+            onClick={() => navigate('/student/profile-setup')}
+            className="w-full bg-[#1F6FEB] text-white py-3 px-6 rounded-lg hover:bg-[#1557c0] transition font-medium"
+          >
+            Complete Setup
+          </button>
         </div>
       </div>
     );
@@ -194,7 +241,7 @@ const StudentDashboard = ({ onNavigate }) => {
                 <ProfileTask completed={false} text="Take skill assessment" />
               </ul>
               <button 
-                onClick={() => onNavigate && onNavigate('student-profile-edit')}
+                onClick={() => navigate('/student/profile-edit')}
                 className="w-full mt-4 py-2 border border-[#1F6FEB] text-[#1F6FEB] rounded-lg hover:bg-[#1F6FEB] hover:text-white transition"
               >
                 Edit Profile

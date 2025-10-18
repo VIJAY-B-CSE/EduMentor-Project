@@ -1,9 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { BookOpen, Menu, X, User, Settings, LogOut, ChevronDown } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
-const Navigation = ({ onNavigate }) => {
+const Navigation = () => {
   const { isAuthenticated, profile, logout } = useAuth();
+  const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -24,13 +26,13 @@ const Navigation = ({ onNavigate }) => {
 
   const handleLogout = async () => {
     await logout();
-    onNavigate('home');
+    navigate('/');
     setMobileMenuOpen(false);
     setDropdownOpen(false);
   };
 
   const handleProfileClick = () => {
-    onNavigate('profile');
+    navigate('/profile');
     setDropdownOpen(false);
     setMobileMenuOpen(false);
   };
@@ -39,34 +41,34 @@ const Navigation = ({ onNavigate }) => {
     <nav className="bg-white shadow-sm sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          <div 
-            className="flex items-center cursor-pointer" 
-            onClick={() => onNavigate('home')}
+          <Link 
+            to="/"
+            className="flex items-center cursor-pointer"
           >
             <BookOpen className="h-8 w-8 text-[#1F6FEB]" />
             <span className="ml-2 text-xl font-semibold text-[#101827]">
               EduMentor
             </span>
-          </div>
+          </Link>
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-6">
-            <button 
-              onClick={() => onNavigate('home')} 
+            <Link 
+              to="/"
               className="text-[#101827] hover:text-[#1F6FEB] transition"
             >
               About Us
-            </button>
+            </Link>
             <button className="text-[#101827] hover:text-[#1F6FEB] transition">
               Contact
             </button>
             {!isAuthenticated ? (
-              <button 
-                onClick={() => onNavigate('login')}
+              <Link 
+                to="/login"
                 className="px-4 py-2 text-[#1F6FEB] border border-[#1F6FEB] rounded-lg hover:bg-[#1F6FEB] hover:text-white transition"
               >
                 Login
-              </button>
+              </Link>
             ) : (
               <div className="relative" ref={dropdownRef}>
                 {/* Profile Avatar with Dropdown */}
@@ -158,12 +160,13 @@ const Navigation = ({ onNavigate }) => {
         {/* Mobile Navigation */}
         {mobileMenuOpen && (
           <div className="md:hidden py-4 space-y-2 border-t border-[#E6EEF8]">
-            <button 
-              onClick={() => { onNavigate('home'); setMobileMenuOpen(false); }} 
+            <Link 
+              to="/"
+              onClick={() => setMobileMenuOpen(false)}
               className="block w-full text-left px-4 py-2 text-[#101827] hover:bg-[#F7F9FB] rounded"
             >
               About Us
-            </button>
+            </Link>
             <button 
               onClick={() => setMobileMenuOpen(false)}
               className="block w-full text-left px-4 py-2 text-[#101827] hover:bg-[#F7F9FB] rounded"
@@ -171,12 +174,13 @@ const Navigation = ({ onNavigate }) => {
               Contact
             </button>
             {!isAuthenticated ? (
-              <button 
-                onClick={() => { onNavigate('login'); setMobileMenuOpen(false); }}
+              <Link 
+                to="/login"
+                onClick={() => setMobileMenuOpen(false)}
                 className="block w-full text-left px-4 py-2 text-[#1F6FEB] hover:bg-[#F7F9FB] rounded font-medium"
               >
                 Login
-              </button>
+              </Link>
             ) : (
               <>
                 {/* Mobile Profile Summary */}
@@ -209,7 +213,7 @@ const Navigation = ({ onNavigate }) => {
 
                 {/* Mobile Menu Items */}
                 <button 
-                  onClick={() => { onNavigate('profile'); setMobileMenuOpen(false); }}
+                  onClick={() => { navigate('/profile'); setMobileMenuOpen(false); }}
                   className="block w-full text-left px-4 py-2 text-[#101827] hover:bg-[#F7F9FB] rounded font-medium flex items-center"
                 >
                   <Settings className="h-4 w-4 mr-3 text-[#A6B4C8]" />

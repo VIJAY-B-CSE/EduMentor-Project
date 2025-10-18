@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { BookOpen, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
-const LoginPage = ({ onNavigate }) => {
+const LoginPage = () => {
+  const navigate = useNavigate();
   const { login } = useAuth();
   const [formData, setFormData] = useState({
     email: '',
@@ -29,14 +31,27 @@ const LoginPage = ({ onNavigate }) => {
       return;
     }
 
-    const result = await login(formData.email, formData.password);
-    setLoading(false);
+    try {
+      // Add timeout to login process (reduced since we're not waiting for profile fetch)
+      const loginPromise = login(formData.email, formData.password);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Login timeout')), 5000)
+      );
 
-    if (result.success) {
-      // Navigation will be handled by App.js based on user role
-      onNavigate('home');
-    } else {
-      setError(result.message);
+      const result = await Promise.race([loginPromise, timeoutPromise]);
+      
+      if (result.success) {
+        console.log('Login successful, navigating...');
+        // Navigation will be handled by App.js based on user role
+        navigate('/');
+      } else {
+        setError(result.message);
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      setError(error.message === 'Login timeout' ? 'Login timed out. Please try again.' : 'Login failed. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -149,14 +164,13 @@ const LoginPage = ({ onNavigate }) => {
           ) : (
             <ForgotPasswordForm
               onBack={() => setShowForgotPassword(false)}
-              onNavigate={onNavigate}
             />
           )}
 
           <p className="mt-6 text-center text-sm text-[#A6B4C8]">
             Don't have an account?{' '}
             <button
-              onClick={() => onNavigate('signup-student')}
+              onClick={() => navigate('/signup/student')}
               className="text-[#1F6FEB] hover:underline font-medium"
             >
               Sign up
