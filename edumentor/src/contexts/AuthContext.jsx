@@ -20,9 +20,12 @@ export const AuthProvider = ({ children }) => {
   // Check active session on mount
   useEffect(() => {
     let isInitialized = false;
-    let timeoutId = null;
+    let isProcessing = false;
 
     const initializeAuth = async () => {
+      if (isProcessing) return;
+      isProcessing = true;
+      
       try {
         setLoading(true);
         await checkUser();
@@ -36,17 +39,9 @@ export const AuthProvider = ({ children }) => {
           setLoading(false);
           isInitialized = true;
         }
+        isProcessing = false;
       }
     };
-
-    // Add timeout to prevent infinite loading only for initial load
-    timeoutId = setTimeout(() => {
-      if (!isInitialized) {
-        console.warn('Auth initialization timeout - setting loading to false');
-        setLoading(false);
-        isInitialized = true;
-      }
-    }, 8000); // Increased to 8 seconds
 
     initializeAuth();
 
@@ -54,13 +49,26 @@ export const AuthProvider = ({ children }) => {
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('Auth event:', event);
+        
+        // Handle token refresh errors gracefully
+        if (event === 'TOKEN_REFRESHED' && !session) {
+          console.log('Token refresh failed, clearing auth state');
+          setUser(null);
+          setProfile(null);
+          setIsAuthenticated(false);
+          setLoading(false);
+          return;
+        }
+        
+        if (isProcessing) {
+          console.log('Already processing auth event, skipping...');
+          return;
+        }
+        
+        isProcessing = true;
+        
         try {
           if (session?.user) {
-            // Clear any existing timeout when user signs in
-            if (timeoutId) {
-              clearTimeout(timeoutId);
-              timeoutId = null;
-            }
             await fetchUserProfile(session.user);
           } else {
             setUser(null);
@@ -69,20 +77,22 @@ export const AuthProvider = ({ children }) => {
           }
         } catch (error) {
           console.error('Auth state change error:', error);
-          setUser(null);
-          setProfile(null);
-          setIsAuthenticated(false);
+          // Don't clear auth state for non-critical errors
+          if (error.message?.includes('refresh token') || error.message?.includes('Invalid Refresh Token')) {
+            console.log('Refresh token error, clearing auth state');
+            setUser(null);
+            setProfile(null);
+            setIsAuthenticated(false);
+          }
         } finally {
           setLoading(false);
           isInitialized = true;
+          isProcessing = false;
         }
       }
     );
 
     return () => {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
       authListener?.subscription?.unsubscribe();
     };
   }, []);
@@ -113,28 +123,104 @@ export const AuthProvider = ({ children }) => {
     try {
       console.log('Fetching profile for user:', authUser.id);
       
-      // Add timeout to profile fetching
-      const profilePromise = supabase
+      // Fetch profile directly without timeout
+      const { data: profileData, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', authUser.id)
         .single();
-      
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Profile fetch timeout')), 5000)
-      );
-
-      const { data: profileData, error } = await Promise.race([profilePromise, timeoutPromise]);
 
       if (error) {
-        console.log('Profile fetch error (likely no profile exists):', error.message);
-        // If profile doesn't exist, create a basic profile structure
-        // This ensures the user can still navigate and complete setup
+        console.log('Profile fetch error:', error.message);
+        
+        // If profile doesn't exist, try to create it first
+        if (error.code === 'PGRST116') {
+          console.log('Profile not found, creating new profile...');
+          const userRole = authUser.user_metadata?.role || 'student';
+          const newProfile = {
+            id: authUser.id,
+            email: authUser.email,
+            role: userRole,
+            full_name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'User',
+            display_name: null,
+            pronouns: null,
+            date_of_birth: null,
+            phone: null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+          
+          // Try to insert the new profile
+          const { error: insertError } = await supabase
+            .from('profiles')
+            .insert([newProfile]);
+          
+          if (insertError) {
+            console.error('Error creating profile:', insertError);
+            // Use fallback profile
+            setUser(authUser);
+            setProfile(newProfile);
+            setIsAuthenticated(true);
+            return;
+          }
+          
+          console.log('Profile created successfully');
+          
+          // Create role-specific profile after main profile is created
+          try {
+            if (userRole === 'student') {
+              const { error: studentError } = await supabase
+                .from('student_profiles')
+                .insert([{ 
+                  user_id: authUser.id,
+                  education_level: '',
+                  institution: '',
+                  major: '',
+                  bio: ''
+                }]);
+              
+              if (studentError) {
+                console.error('Error creating student profile:', studentError);
+              } else {
+                console.log('Student profile created successfully');
+              }
+            } else if (userRole === 'mentor') {
+              const { error: mentorError } = await supabase
+                .from('mentor_profiles')
+                .insert([{ 
+                  user_id: authUser.id,
+                  title: '',
+                  experience_years: 0,
+                  verification_status: 'unverified',
+                  bio: ''
+                }]);
+              
+              if (mentorError) {
+                console.error('Error creating mentor profile:', mentorError);
+              } else {
+                console.log('Mentor profile created successfully');
+              }
+            }
+          } catch (profileError) {
+            console.error('Error creating role-specific profile:', profileError);
+          }
+          
+          setUser(authUser);
+          setProfile(newProfile);
+          setIsAuthenticated(true);
+          return;
+        }
+        
+        // For other errors, create a basic profile structure
         const basicProfile = {
           id: authUser.id,
           email: authUser.email,
-          role: 'student', // Default role
+          role: 'student',
           full_name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'User',
+          display_name: null,
+          pronouns: null,
+          date_of_birth: null,
+          phone: null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };
@@ -156,8 +242,12 @@ export const AuthProvider = ({ children }) => {
       const basicProfile = {
         id: authUser.id,
         email: authUser.email,
-        role: 'student', // Default role
+        role: 'student',
         full_name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'User',
+        display_name: null,
+        pronouns: null,
+        date_of_birth: null,
+        phone: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
@@ -186,48 +276,9 @@ export const AuthProvider = ({ children }) => {
       if (signUpError) throw signUpError;
 
       if (authData.user) {
-        // Step 2: Wait a moment for the trigger to create the profile
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        // Step 3: Create role-specific profile
-        try {
-          if (role === 'student') {
-            const { error: studentError } = await supabase
-              .from('student_profiles')
-              .insert([{ 
-                user_id: authData.user.id,
-                education_level: '',
-                institution: '',
-                major: '',
-                bio: ''
-              }]);
-            
-            if (studentError) {
-              console.error('Error creating student profile:', studentError);
-            } else {
-              console.log('Student profile created successfully');
-            }
-          } else if (role === 'mentor') {
-            const { error: mentorError } = await supabase
-              .from('mentor_profiles')
-              .insert([{ 
-                user_id: authData.user.id,
-                title: '',
-                experience_years: 0,
-                verification_status: 'unverified',
-                bio: ''
-              }]);
-            
-            if (mentorError) {
-              console.error('Error creating mentor profile:', mentorError);
-            } else {
-              console.log('Mentor profile created successfully');
-            }
-          }
-        } catch (profileError) {
-          console.error('Error in profile creation:', profileError);
-        }
-
+        // Profile creation will happen automatically after email verification
+        // when the user logs in for the first time
+        
         return {
           success: true,
           message: 'Signup successful! Please check your email to verify your account.',

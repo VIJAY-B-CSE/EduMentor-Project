@@ -113,34 +113,62 @@ const StudentProfileSetup = () => {
 
     try {
       // Update profile table
+      const profileUpdateData = {
+        full_name: formData.display_name || profile.full_name,
+        display_name: formData.display_name,
+        pronouns: formData.pronouns,
+        phone: formData.phone,
+        date_of_birth: formData.date_of_birth,
+        timezone: formData.timezone
+      };
+      
+      console.log('Updating profile with data:', profileUpdateData);
+      
       const { error: profileError } = await supabase
         .from('profiles')
-        .update({
-          full_name: formData.display_name || profile.full_name,
-          phone: formData.phone,
-          timezone: formData.timezone
-        })
+        .update(profileUpdateData)
         .eq('id', user.id);
 
-      if (profileError) throw profileError;
+      if (profileError) {
+        console.error('Profile update error:', profileError);
+        throw profileError;
+      }
+      
+      console.log('Profile updated successfully');
 
       // Update student_profiles table
+      const studentUpdateData = {
+        user_id: user.id,
+        education_level: formData.education_level,
+        institution: formData.institution,
+        major: formData.major,
+        year_of_study: formData.year_of_study,
+        primary_interests: formData.career_interests.join(', '),
+        top_skills: formData.skills.join(', '),
+        learning_goals: formData.learning_goals,
+        preferred_learning_mode: formData.preferred_mode,
+        languages: formData.languages.join(', '),
+        linkedin_url: formData.linkedin_url,
+        github_url: formData.github_url,
+        portfolio_url: formData.portfolio_url,
+        bio: formData.learning_goals,
+        updated_at: new Date().toISOString()
+      };
+      
+      console.log('Updating student profile with data:', studentUpdateData);
+      
       const { error: studentError } = await supabase
         .from('student_profiles')
-        .upsert({
-          user_id: user.id,
-          education_level: formData.education_level,
-          institution: formData.institution,
-          major: formData.major,
-          career_interests: formData.career_interests,
-          skills: formData.skills,
-          bio: formData.learning_goals,
-          updated_at: new Date().toISOString()
-        }, {
+        .upsert(studentUpdateData, {
           onConflict: 'user_id'
         });
 
-      if (studentError) throw studentError;
+      if (studentError) {
+        console.error('Student profile update error:', studentError);
+        throw studentError;
+      }
+      
+      console.log('Student profile updated successfully');
 
       // Navigate to dashboard
       navigate('/student/dashboard');

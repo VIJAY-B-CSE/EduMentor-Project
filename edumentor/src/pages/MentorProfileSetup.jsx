@@ -121,6 +121,7 @@ const MentorProfileSetup = () => {
         .from('profiles')
         .update({
           full_name: formData.display_name || profile.full_name,
+          display_name: formData.display_name,
           phone: formData.phone,
           timezone: formData.timezone
         })
@@ -134,9 +135,14 @@ const MentorProfileSetup = () => {
         .upsert({
           user_id: user.id,
           title: formData.professional_title,
-          experience_years: parseInt(formData.years_of_experience.split('-')[0]) || 0,
-          industries: formData.industries,
-          expertise: formData.specializations,
+          organization: formData.organization,
+          experience_years: formData.years_of_experience,
+          industries: formData.industries.join(', '),
+          skills: formData.specializations.join(', '),
+          focus_areas: formData.mentorship_focus.join(', '),
+          session_types: formData.session_types.join(', '),
+          session_duration_options: formData.session_durations.join(', '),
+          languages: formData.languages.join(', '),
           bio: formData.short_bio,
           linkedin_url: formData.linkedin_url,
           portfolio_url: formData.portfolio_url,

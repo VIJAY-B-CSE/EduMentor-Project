@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import TagInput from '../components/TagInput';
+import MultiSelect from '../components/MultiSelect';
 import {
   User,
   Mail,
@@ -33,33 +35,222 @@ const ProfilePage = () => {
   const [success, setSuccess] = useState('');
   const [uploadProgress, setUploadProgress] = useState({});
 
+  // Options for dropdowns
+  const experienceOptions = [
+    'Less than 1 year',
+    '1-2 years',
+    '3-5 years',
+    '6-10 years',
+    '11-15 years',
+    '16-20 years',
+    'More than 20 years'
+  ];
+
+  const industryOptions = [
+    'Technology',
+    'Healthcare',
+    'Finance',
+    'Education',
+    'Marketing',
+    'Sales',
+    'Design',
+    'Engineering',
+    'Consulting',
+    'Non-profit',
+    'Government',
+    'Manufacturing',
+    'Retail',
+    'Real Estate',
+    'Other'
+  ];
+
+  const sessionTypeOptions = [
+    'One-on-One Mentoring',
+    'Group Sessions',
+    'Workshop Facilitation',
+    'Career Counseling',
+    'Skill Assessment',
+    'Project Review',
+    'Interview Preparation',
+    'Resume Review',
+    'Networking Guidance',
+    'Goal Setting'
+  ];
+
+  const durationOptions = [
+    '30 minutes',
+    '45 minutes',
+    '1 hour',
+    '1.5 hours',
+    '2 hours',
+    'Half day (4 hours)',
+    'Full day (8 hours)'
+  ];
+
+  const educationLevelOptions = [
+    'High School',
+    'Associate Degree',
+    'Bachelor\'s Degree',
+    'Master\'s Degree',
+    'Doctorate/PhD',
+    'Professional Certification',
+    'Other'
+  ];
+
+  const learningModeOptions = [
+    'Online',
+    'In-person',
+    'Hybrid',
+    'Self-paced',
+    'Structured Program',
+    'Mentorship',
+    'Workshop',
+    'Bootcamp'
+  ];
+
+  // Helper function to convert data to arrays (handles both JSONB and TEXT)
+  const convertToArray = (data) => {
+    if (!data) return [];
+    if (Array.isArray(data)) return data;
+    if (typeof data === 'string' && data.trim()) {
+      return data.split(',').map(s => s.trim()).filter(s => s);
+    }
+    if (typeof data === 'object' && data !== null) {
+      // Handle JSONB objects
+      try {
+        return Object.values(data).filter(v => v);
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  };
+
+  // Helper function to format multiple options for better display
+  const formatMultipleOptions = (data) => {
+    if (!data) return 'Not specified';
+    if (Array.isArray(data)) {
+      // Filter out empty strings and check if array has valid items
+      const validItems = data.filter(item => item && item.trim && item.trim() !== '');
+      if (validItems.length === 0) return 'Not specified';
+      return validItems;
+    }
+    if (typeof data === 'string' && data.trim()) {
+      const items = data.split(',').map(s => s.trim()).filter(s => s);
+      if (items.length === 0) return 'Not specified';
+      return items;
+    }
+    return 'Not specified';
+  };
+
   useEffect(() => {
-    if (user) {
+    if (user && profile) {
       fetchProfileData();
-    } else {
+    } else if (!user) {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, profile]); // Add profile as dependency
 
   const fetchProfileData = async () => {
     try {
       setLoading(true);
       
-      // Merge main profile data with role-specific data
-      let mergedData = { ...profile }; // Start with main profile data
+      // First, get the latest profile data from the profiles table
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
       
-      if (profile?.role === 'student') {
+      if (profileError) {
+        console.error('Error fetching profile data:', profileError);
+        // If profile doesn't exist, use the profile from AuthContext
+        if (profileError.code === 'PGRST116') {
+          console.log('Profile not found in database, using AuthContext profile');
+          setProfileData(profile || {});
+          setLoading(false);
+          return;
+        }
+        throw profileError;
+      }
+      
+      console.log('Raw profile data from database:', profileData);
+      console.log('Profile data fields check:', {
+        display_name: profileData?.display_name,
+        pronouns: profileData?.pronouns,
+        date_of_birth: profileData?.date_of_birth,
+        phone: profileData?.phone,
+        full_name: profileData?.full_name
+      });
+      
+      // Merge main profile data with role-specific data
+      let mergedData = { 
+        ...profileData,
+        // Ensure we have fallback values for personal info
+        display_name: profileData?.display_name || 'Not provided',
+        pronouns: profileData?.pronouns || 'Not specified',
+        date_of_birth: profileData?.date_of_birth || null,
+        phone: profileData?.phone || 'Not provided'
+      }; // Start with main profile data
+      
+      console.log('Initial merged data:', {
+        display_name: mergedData.display_name,
+        pronouns: mergedData.pronouns,
+        date_of_birth: mergedData.date_of_birth,
+        phone: mergedData.phone,
+        full_name: mergedData.full_name
+      });
+      
+      if (profileData?.role === 'student') {
+        console.log('Fetching student profile data for user:', user.id);
         const { data, error } = await supabase
           .from('student_profiles')
           .select('*')
           .eq('user_id', user.id)
           .single();
         
-        if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows found
-        if (data) {
-          mergedData = { ...mergedData, ...data };
+        if (error && error.code !== 'PGRST116') {
+          console.error('Student profile fetch error:', error);
+          throw error;
         }
-      } else if (profile?.role === 'mentor') {
+        
+        console.log('Student profile raw data:', data);
+        
+        if (data) {
+          // Convert data to arrays and handle both JSONB and TEXT formats
+          const processedData = {
+            ...data,
+            primary_interests: convertToArray(data.primary_interests),
+            top_skills: convertToArray(data.top_skills),
+            languages: convertToArray(data.languages),
+            preferred_learning_mode: convertToArray(data.preferred_learning_mode)
+          };
+          
+          console.log('Student processed data:', processedData);
+          
+          // Merge student-specific data but preserve main profile data for personal info
+          mergedData = { 
+            ...mergedData, 
+            ...processedData,
+            // Ensure personal info from main profile takes precedence
+            display_name: profileData.display_name || mergedData.display_name,
+            pronouns: profileData.pronouns || mergedData.pronouns,
+            date_of_birth: profileData.date_of_birth || mergedData.date_of_birth,
+            phone: profileData.phone || mergedData.phone,
+            full_name: profileData.full_name || mergedData.full_name
+          };
+          
+          console.log('Student merged data after processing:', {
+            display_name: mergedData.display_name,
+            pronouns: mergedData.pronouns,
+            date_of_birth: mergedData.date_of_birth,
+            phone: mergedData.phone,
+            full_name: mergedData.full_name
+          });
+        } else {
+          console.log('No student profile data found');
+        }
+      } else if (profileData?.role === 'mentor') {
         const { data, error } = await supabase
           .from('mentor_profiles')
           .select('*')
@@ -68,11 +259,55 @@ const ProfilePage = () => {
         
         if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows found
         if (data) {
-          mergedData = { ...mergedData, ...data };
+          // Convert data to arrays and handle both JSONB and TEXT formats
+          const processedData = {
+            ...data,
+            industries: convertToArray(data.industries),
+            skills: convertToArray(data.skills),
+            focus_areas: convertToArray(data.focus_areas),
+            session_types: convertToArray(data.session_types),
+            session_duration_options: convertToArray(data.session_duration_options),
+            languages: convertToArray(data.languages),
+            // Fix experience_years to handle string values properly
+            experience_years: data.experience_years ? 
+              (typeof data.experience_years === 'string' ? 
+               data.experience_years : 
+               typeof data.experience_years === 'number' ? 
+               data.experience_years.toString() : 
+               data.experience_years) : ''
+          };
+          // Merge mentor-specific data but preserve main profile data for personal info
+          mergedData = { 
+            ...mergedData, 
+            ...processedData,
+            // Ensure personal info from main profile takes precedence
+            display_name: profileData.display_name || mergedData.display_name,
+            pronouns: profileData.pronouns || mergedData.pronouns,
+            date_of_birth: profileData.date_of_birth || mergedData.date_of_birth,
+            phone: profileData.phone || mergedData.phone,
+            full_name: profileData.full_name || mergedData.full_name
+          };
         }
       }
       
       setProfileData(mergedData || {});
+      
+      // Debug logging to help identify data fetching issues
+      console.log('Profile data fetched:', {
+        mainProfile: profileData,
+        mergedData: mergedData,
+        role: profileData?.role,
+        displayName: mergedData?.display_name,
+        pronouns: mergedData?.pronouns,
+        dateOfBirth: mergedData?.date_of_birth,
+        phone: mergedData?.phone,
+        fullName: mergedData?.full_name
+      });
+      
+      // Validate role consistency
+      if (mergedData?.role && mergedData.role !== profile?.role) {
+        console.warn('Role mismatch detected:', mergedData.role, 'vs', profile?.role);
+      }
     } catch (error) {
       console.error('Error fetching profile:', error);
       setError('Failed to load profile data');
@@ -86,14 +321,50 @@ const ProfilePage = () => {
     setError('');
     setSuccess('');
 
+    // Removed timeout to prevent hanging issues
+
     try {
+      // Validate required fields
+      if (!profileData.full_name?.trim()) {
+        throw new Error('Full name is required');
+      }
+
+      // Check for unique display name if provided
+      if (profileData.display_name?.trim()) {
+        try {
+          const { data: existingUsers, error: checkError } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('display_name', profileData.display_name.trim())
+            .neq('id', user.id);
+          
+          if (checkError) {
+            console.error('Error checking display name uniqueness:', checkError);
+            // Don't throw error for this check, just log it and continue
+          } else if (existingUsers && existingUsers.length > 0) {
+            // If display name is taken, show error and stop save
+            setError('Display name is already taken. Please choose a different one.');
+            setSaving(false);
+            return;
+          }
+        } catch (error) {
+          console.error('Display name check failed:', error);
+          // If check fails due to network error, continue with save
+          if (error.message?.includes('already taken')) {
+            setError(error.message);
+            setSaving(false);
+            return;
+          }
+        }
+      }
+
       // Update main profile with only profile table fields
       const mainProfileUpdates = {
-        full_name: profileData.full_name,
-        display_name: profileData.display_name,
-        pronouns: profileData.pronouns,
-        date_of_birth: profileData.date_of_birth,
-        phone: profileData.phone,
+        full_name: profileData.full_name?.trim(),
+        display_name: profileData.display_name?.trim() || null,
+        pronouns: profileData.pronouns || null,
+        date_of_birth: profileData.date_of_birth || null,
+        phone: profileData.phone?.trim() || null,
         avatar_url: profileData.avatar_url,
         timezone: profileData.timezone || profile?.timezone,
         updated_at: new Date().toISOString()
@@ -115,7 +386,7 @@ const ProfilePage = () => {
       };
 
       if (profile?.role === 'student') {
-        // Student-specific fields
+        // Student-specific fields - convert arrays to comma-separated strings
         roleProfileData = {
           ...roleProfileData,
           education_level: profileData.education_level,
@@ -123,11 +394,15 @@ const ProfilePage = () => {
           major: profileData.major,
           program: profileData.program,
           year_of_study: profileData.year_of_study,
-          primary_interests: profileData.primary_interests,
-          top_skills: profileData.top_skills,
-          learning_goals: profileData.learning_goals,
-          preferred_learning_mode: profileData.preferred_learning_mode,
-          languages: profileData.languages,
+          primary_interests: Array.isArray(profileData.primary_interests) ? 
+            profileData.primary_interests.join(', ') : (profileData.primary_interests || ''),
+          top_skills: Array.isArray(profileData.top_skills) ? 
+            profileData.top_skills.join(', ') : (profileData.top_skills || ''),
+          learning_goals: profileData.learning_goals || '',
+          preferred_learning_mode: Array.isArray(profileData.preferred_learning_mode) ? 
+            profileData.preferred_learning_mode.join(', ') : (profileData.preferred_learning_mode || ''),
+          languages: Array.isArray(profileData.languages) ? 
+            profileData.languages.join(', ') : (profileData.languages || ''),
           bio: profileData.bio,
           resume_url: profileData.resume_url,
           linkedin_url: profileData.linkedin_url,
@@ -135,18 +410,24 @@ const ProfilePage = () => {
           portfolio_url: profileData.portfolio_url
         };
       } else {
-        // Mentor-specific fields
+        // Mentor-specific fields - convert arrays to comma-separated strings
         roleProfileData = {
           ...roleProfileData,
           title: profileData.title,
           organization: profileData.organization,
-          experience_years: profileData.experience_years,
-          industries: profileData.industries,
-          skills: profileData.skills,
-          focus_areas: profileData.focus_areas,
-          session_types: profileData.session_types,
-          session_duration_options: profileData.session_duration_options,
-          languages: profileData.languages,
+          experience_years: profileData.experience_years || null, // Keep as string for ranges like "3-5"
+          industries: Array.isArray(profileData.industries) ? 
+            profileData.industries.join(', ') : (profileData.industries || ''),
+          skills: Array.isArray(profileData.skills) ? 
+            profileData.skills.join(', ') : (profileData.skills || ''),
+          focus_areas: Array.isArray(profileData.focus_areas) ? 
+            profileData.focus_areas.join(', ') : (profileData.focus_areas || ''),
+          session_types: Array.isArray(profileData.session_types) ? 
+            profileData.session_types.join(', ') : (profileData.session_types || ''),
+          session_duration_options: Array.isArray(profileData.session_duration_options) ? 
+            profileData.session_duration_options.join(', ') : (profileData.session_duration_options || ''),
+          languages: Array.isArray(profileData.languages) ? 
+            profileData.languages.join(', ') : (profileData.languages || ''),
           bio: profileData.bio,
           verification_docs_url: profileData.verification_docs_url,
           linkedin_url: profileData.linkedin_url,
@@ -175,6 +456,7 @@ const ProfilePage = () => {
       console.error('Error updating profile:', error);
       setError(error.message || 'Failed to update profile');
     } finally {
+      // Always ensure saving state is reset, even if there's an error
       setSaving(false);
     }
   };
@@ -214,6 +496,11 @@ const ProfilePage = () => {
 
   const handleInputChange = (field, value) => {
     setProfileData({ ...profileData, [field]: value });
+    
+    // Clear any existing errors when user makes changes
+    if (error) {
+      setError('');
+    }
   };
 
   if (loading) {
@@ -228,6 +515,10 @@ const ProfilePage = () => {
   }
 
   const isStudent = profile?.role === 'student';
+  const isMentor = profile?.role === 'mentor';
+
+  // Debug logging for role detection
+  console.log('Profile role:', profile?.role, 'isStudent:', isStudent, 'isMentor:', isMentor);
 
   return (
     <div className="min-h-screen bg-[#F7F9FB] py-8">
@@ -584,21 +875,34 @@ const ProfilePage = () => {
                       Preferred Learning Mode
                     </label>
                     {editing ? (
-                      <select
-                        value={profileData?.preferred_learning_mode || ''}
-                        onChange={(e) => handleInputChange('preferred_learning_mode', e.target.value)}
-                        className="w-full px-4 py-3 border border-[#E6EEF8] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1F6FEB]"
-                      >
-                        <option value="">Select learning mode</option>
-                        <option value="1-on-1 Mentorship">1-on-1 Mentorship</option>
-                        <option value="Group Learning">Group Learning</option>
-                        <option value="Self-paced">Self-paced</option>
-                        <option value="Hybrid">Hybrid</option>
-                      </select>
+                      <MultiSelect
+                        options={learningModeOptions}
+                        selectedValues={Array.isArray(profileData?.preferred_learning_mode) ? profileData.preferred_learning_mode : []}
+                        onChange={(values) => handleInputChange('preferred_learning_mode', values)}
+                        placeholder="Select learning modes"
+                        maxSelections={3}
+                      />
                     ) : (
-                      <p className="px-4 py-3 bg-[#F7F9FB] rounded-lg text-[#101827]">
-                        {profileData?.preferred_learning_mode || 'Not specified'}
-                      </p>
+                      <div className="px-4 py-3 bg-[#F7F9FB] rounded-lg text-[#101827]">
+                        {(() => {
+                          const learningMode = formatMultipleOptions(profileData?.preferred_learning_mode);
+                          if (Array.isArray(learningMode) && learningMode.length > 0) {
+                            return (
+                              <div className="flex flex-wrap gap-2">
+                                {learningMode.map((mode, index) => (
+                                  <span
+                                    key={index}
+                                    className="px-3 py-1 bg-[#9333EA] text-white text-sm rounded-full"
+                                  >
+                                    {mode}
+                                  </span>
+                                ))}
+                              </div>
+                            );
+                          }
+                          return <span>{learningMode}</span>;
+                        })()}
+                      </div>
                     )}
                   </div>
 
@@ -607,17 +911,33 @@ const ProfilePage = () => {
                       Languages Known
                     </label>
                     {editing ? (
-                      <input
-                        type="text"
-                        value={Array.isArray(profileData?.languages) ? profileData.languages.join(', ') : profileData?.languages || ''}
-                        onChange={(e) => handleInputChange('languages', e.target.value.split(',').map(lang => lang.trim()).filter(lang => lang))}
-                        className="w-full px-4 py-3 border border-[#E6EEF8] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1F6FEB]"
+                      <TagInput
+                        tags={Array.isArray(profileData?.languages) ? profileData.languages : []}
+                        onChange={(tags) => handleInputChange('languages', tags)}
                         placeholder="English, Tamil, Hindi, French"
+                        maxTags={10}
                       />
                     ) : (
-                      <p className="px-4 py-3 bg-[#F7F9FB] rounded-lg text-[#101827]">
-                        {Array.isArray(profileData?.languages) ? profileData.languages.join(', ') : profileData?.languages || 'Not specified'}
-                      </p>
+                      <div className="px-4 py-3 bg-[#F7F9FB] rounded-lg text-[#101827]">
+                        {(() => {
+                          const languages = formatMultipleOptions(profileData?.languages);
+                          if (Array.isArray(languages) && languages.length > 0) {
+                            return (
+                              <div className="flex flex-wrap gap-2">
+                                {languages.map((lang, index) => (
+                                  <span
+                                    key={index}
+                                    className="px-3 py-1 bg-[#1F6FEB] text-white text-sm rounded-full"
+                                  >
+                                    {lang}
+                                  </span>
+                                ))}
+                              </div>
+                            );
+                          }
+                          return <span>{languages}</span>;
+                        })()}
+                      </div>
                     )}
                   </div>
                 </>
@@ -672,10 +992,9 @@ const ProfilePage = () => {
                         className="w-full px-4 py-3 border border-[#E6EEF8] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00C38A]"
                       >
                         <option value="">Select experience</option>
-                        <option value="0-2">0-2 years</option>
-                        <option value="3-5">3-5 years</option>
-                        <option value="6-10">6-10 years</option>
-                        <option value="10+">10+ years</option>
+                        {experienceOptions.map((option, index) => (
+                          <option key={index} value={option}>{option}</option>
+                        ))}
                       </select>
                     ) : (
                       <p className="px-4 py-3 bg-[#F7F9FB] rounded-lg text-[#101827]">
@@ -722,17 +1041,33 @@ const ProfilePage = () => {
                       Primary Career Interests *
                     </label>
                     {editing ? (
-                      <input
-                        type="text"
-                        value={Array.isArray(profileData?.primary_interests) ? profileData.primary_interests.join(', ') : profileData?.primary_interests || ''}
-                        onChange={(e) => handleInputChange('primary_interests', e.target.value.split(',').map(item => item.trim()).filter(item => item))}
-                        className="w-full px-4 py-3 border border-[#E6EEF8] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1F6FEB]"
+                      <TagInput
+                        tags={Array.isArray(profileData?.primary_interests) ? profileData.primary_interests : []}
+                        onChange={(tags) => handleInputChange('primary_interests', tags)}
                         placeholder="Software Development, UI/UX, Data Science, AI, Marketing"
+                        maxTags={10}
                       />
                     ) : (
-                      <p className="px-4 py-3 bg-[#F7F9FB] rounded-lg text-[#101827]">
-                        {Array.isArray(profileData?.primary_interests) ? profileData.primary_interests.join(', ') : profileData?.primary_interests || 'Not specified'}
-                      </p>
+                      <div className="px-4 py-3 bg-[#F7F9FB] rounded-lg text-[#101827]">
+                        {(() => {
+                          const interests = formatMultipleOptions(profileData?.primary_interests);
+                          if (Array.isArray(interests) && interests.length > 0) {
+                            return (
+                              <div className="flex flex-wrap gap-2">
+                                {interests.map((interest, index) => (
+                                  <span
+                                    key={index}
+                                    className="px-3 py-1 bg-[#FF6B6B] text-white text-sm rounded-full"
+                                  >
+                                    {interest}
+                                  </span>
+                                ))}
+                              </div>
+                            );
+                          }
+                          return <span>{interests}</span>;
+                        })()}
+                      </div>
                     )}
                   </div>
 
@@ -741,17 +1076,33 @@ const ProfilePage = () => {
                       Top Skills *
                     </label>
                     {editing ? (
-                      <input
-                        type="text"
-                        value={Array.isArray(profileData?.top_skills) ? profileData.top_skills.join(', ') : profileData?.top_skills || ''}
-                        onChange={(e) => handleInputChange('top_skills', e.target.value.split(',').map(skill => skill.trim()).filter(skill => skill))}
-                        className="w-full px-4 py-3 border border-[#E6EEF8] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1F6FEB]"
+                      <TagInput
+                        tags={Array.isArray(profileData?.top_skills) ? profileData.top_skills : []}
+                        onChange={(tags) => handleInputChange('top_skills', tags)}
                         placeholder="Java, Python, HTML/CSS, React, Communication, Leadership"
+                        maxTags={15}
                       />
                     ) : (
-                      <p className="px-4 py-3 bg-[#F7F9FB] rounded-lg text-[#101827]">
-                        {Array.isArray(profileData?.top_skills) ? profileData.top_skills.join(', ') : profileData?.top_skills || 'Not specified'}
-                      </p>
+                      <div className="px-4 py-3 bg-[#F7F9FB] rounded-lg text-[#101827]">
+                        {(() => {
+                          const skills = formatMultipleOptions(profileData?.top_skills);
+                          if (Array.isArray(skills) && skills.length > 0) {
+                            return (
+                              <div className="flex flex-wrap gap-2">
+                                {skills.map((skill, index) => (
+                                  <span
+                                    key={index}
+                                    className="px-3 py-1 bg-[#00C38A] text-white text-sm rounded-full"
+                                  >
+                                    {skill}
+                                  </span>
+                                ))}
+                              </div>
+                            );
+                          }
+                          return <span>{skills}</span>;
+                        })()}
+                      </div>
                     )}
                   </div>
 
@@ -781,17 +1132,34 @@ const ProfilePage = () => {
                       Industry / Domain Expertise *
                     </label>
                     {editing ? (
-                      <input
-                        type="text"
-                        value={Array.isArray(profileData?.industries) ? profileData.industries.join(', ') : profileData?.industries || ''}
-                        onChange={(e) => handleInputChange('industries', e.target.value.split(',').map(industry => industry.trim()).filter(industry => industry))}
-                        className="w-full px-4 py-3 border border-[#E6EEF8] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00C38A]"
-                        placeholder="IT, Finance, Healthcare, Marketing, Education, Design"
+                      <MultiSelect
+                        options={industryOptions}
+                        selectedValues={Array.isArray(profileData?.industries) ? profileData.industries : []}
+                        onChange={(values) => handleInputChange('industries', values)}
+                        placeholder="Select industries"
+                        maxSelections={5}
                       />
                     ) : (
-                      <p className="px-4 py-3 bg-[#F7F9FB] rounded-lg text-[#101827]">
-                        {Array.isArray(profileData?.industries) ? profileData.industries.join(', ') : profileData?.industries || 'Not specified'}
-                      </p>
+                      <div className="px-4 py-3 bg-[#F7F9FB] rounded-lg text-[#101827]">
+                        {(() => {
+                          const industries = formatMultipleOptions(profileData?.industries);
+                          if (Array.isArray(industries) && industries.length > 0) {
+                            return (
+                              <div className="flex flex-wrap gap-2">
+                                {industries.map((industry, index) => (
+                                  <span
+                                    key={index}
+                                    className="px-3 py-1 bg-[#00C38A] text-white text-sm rounded-full"
+                                  >
+                                    {industry}
+                                  </span>
+                                ))}
+                              </div>
+                            );
+                          }
+                          return <span>{industries}</span>;
+                        })()}
+                      </div>
                     )}
                   </div>
 
@@ -800,17 +1168,33 @@ const ProfilePage = () => {
                       Specializations / Skills *
                     </label>
                     {editing ? (
-                      <input
-                        type="text"
-                        value={Array.isArray(profileData?.skills) ? profileData.skills.join(', ') : profileData?.skills || ''}
-                        onChange={(e) => handleInputChange('skills', e.target.value.split(',').map(skill => skill.trim()).filter(skill => skill))}
-                        className="w-full px-4 py-3 border border-[#E6EEF8] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00C38A]"
+                      <TagInput
+                        tags={Array.isArray(profileData?.skills) ? profileData.skills : []}
+                        onChange={(tags) => handleInputChange('skills', tags)}
                         placeholder="React, Data Analytics, Cybersecurity, Product Design"
+                        maxTags={20}
                       />
                     ) : (
-                      <p className="px-4 py-3 bg-[#F7F9FB] rounded-lg text-[#101827]">
-                        {Array.isArray(profileData?.skills) ? profileData.skills.join(', ') : profileData?.skills || 'Not specified'}
-                      </p>
+                      <div className="px-4 py-3 bg-[#F7F9FB] rounded-lg text-[#101827]">
+                        {(() => {
+                          const skills = formatMultipleOptions(profileData?.skills);
+                          if (Array.isArray(skills) && skills.length > 0) {
+                            return (
+                              <div className="flex flex-wrap gap-2">
+                                {skills.map((skill, index) => (
+                                  <span
+                                    key={index}
+                                    className="px-3 py-1 bg-[#1F6FEB] text-white text-sm rounded-full"
+                                  >
+                                    {skill}
+                                  </span>
+                                ))}
+                              </div>
+                            );
+                          }
+                          return <span>{skills}</span>;
+                        })()}
+                      </div>
                     )}
                   </div>
 
@@ -819,17 +1203,33 @@ const ProfilePage = () => {
                       Mentorship Focus Areas *
                     </label>
                     {editing ? (
-                      <input
-                        type="text"
-                        value={Array.isArray(profileData?.focus_areas) ? profileData.focus_areas.join(', ') : profileData?.focus_areas || ''}
-                        onChange={(e) => handleInputChange('focus_areas', e.target.value.split(',').map(area => area.trim()).filter(area => area))}
-                        className="w-full px-4 py-3 border border-[#E6EEF8] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00C38A]"
+                      <TagInput
+                        tags={Array.isArray(profileData?.focus_areas) ? profileData.focus_areas : []}
+                        onChange={(tags) => handleInputChange('focus_areas', tags)}
                         placeholder="Career Guidance, Interview Prep, Resume Building, Skill Upskilling"
+                        maxTags={10}
                       />
                     ) : (
-                      <p className="px-4 py-3 bg-[#F7F9FB] rounded-lg text-[#101827]">
-                        {Array.isArray(profileData?.focus_areas) ? profileData.focus_areas.join(', ') : profileData?.focus_areas || 'Not specified'}
-                      </p>
+                      <div className="px-4 py-3 bg-[#F7F9FB] rounded-lg text-[#101827]">
+                        {(() => {
+                          const focusAreas = formatMultipleOptions(profileData?.focus_areas);
+                          if (Array.isArray(focusAreas) && focusAreas.length > 0) {
+                            return (
+                              <div className="flex flex-wrap gap-2">
+                                {focusAreas.map((area, index) => (
+                                  <span
+                                    key={index}
+                                    className="px-3 py-1 bg-[#FF6B6B] text-white text-sm rounded-full"
+                                  >
+                                    {area}
+                                  </span>
+                                ))}
+                              </div>
+                            );
+                          }
+                          return <span>{focusAreas}</span>;
+                        })()}
+                      </div>
                     )}
                   </div>
 
@@ -1050,17 +1450,33 @@ const ProfilePage = () => {
                       Languages Spoken *
                     </label>
                     {editing ? (
-                      <input
-                        type="text"
-                        value={Array.isArray(profileData?.languages) ? profileData.languages.join(', ') : profileData?.languages || ''}
-                        onChange={(e) => handleInputChange('languages', e.target.value.split(',').map(lang => lang.trim()).filter(lang => lang))}
-                        className="w-full px-4 py-3 border border-[#E6EEF8] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00C38A]"
+                      <TagInput
+                        tags={Array.isArray(profileData?.languages) ? profileData.languages : []}
+                        onChange={(tags) => handleInputChange('languages', tags)}
                         placeholder="English, Tamil, Hindi"
+                        maxTags={10}
                       />
                     ) : (
-                      <p className="px-4 py-3 bg-[#F7F9FB] rounded-lg text-[#101827]">
-                        {Array.isArray(profileData?.languages) ? profileData.languages.join(', ') : profileData?.languages || 'Not specified'}
-                      </p>
+                      <div className="px-4 py-3 bg-[#F7F9FB] rounded-lg text-[#101827]">
+                        {(() => {
+                          const languages = formatMultipleOptions(profileData?.languages);
+                          if (Array.isArray(languages) && languages.length > 0) {
+                            return (
+                              <div className="flex flex-wrap gap-2">
+                                {languages.map((lang, index) => (
+                                  <span
+                                    key={index}
+                                    className="px-3 py-1 bg-[#00C38A] text-white text-sm rounded-full"
+                                  >
+                                    {lang}
+                                  </span>
+                                ))}
+                              </div>
+                            );
+                          }
+                          return <span>{languages}</span>;
+                        })()}
+                      </div>
                     )}
                   </div>
                 </>
